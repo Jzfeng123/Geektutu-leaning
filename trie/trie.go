@@ -2,12 +2,13 @@ package trie
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
 // 实现一个简单的前缀树路由，假设用户传入的URL的标准的
 type router struct {
-	roots map[string]*node
+	roots map[string]*node //构造路由森林
 }
 
 // 初始化一个router
@@ -21,13 +22,20 @@ func newRouter() *router {
 // /user/register
 // 1.首先默认用户传的数据是标准的，如上
 func (r *router) AddRouter(pattern string, data string) {
-	_, ok := r.roots["/"] // 根路由"/"
-	if !ok {              //创建根路由
-		r.roots["/"] = &node{}
+	root, ok := r.roots["/"] // 根路由"/"
+	fmt.Println("r.root", r.roots["/"])
+	if !ok { //创建长度根路由
+		//root = &node{
+		//	part: "/",
+		//}
+		r.roots["/"] = &node{
+			part: "/",
+		}
+		root = r.roots["/"]
 	}
 	// 这一段可以抽象到另一个函数上去
 	// 将pattern中的URL根据/进行划分形成切片
-	root := r.roots["/"]                                    // "/"后期为method
+	//root := r.roots["/"]                                    // "/"后期为method
 	parts := strings.Split(strings.Trim(pattern, "/"), "/") //去除左右两边及中间的/
 	for _, part := range parts {
 		if part == "" {
