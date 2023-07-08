@@ -35,13 +35,14 @@ type Handler interface {
 // 这种方式会导致无法扩展，因此需要用上下文来进行抽象
 //type HandleFunc func(w http.ResponseWriter, req *http.Request) //抽象一个处理函数
 type HandleFunc func(*Context)
+
 type server interface {
 	http.Handler
 	Start(addr string) error
 	Stop() error
 	// 注册路由，一个非常核心的API，不能给开发者乱用
 	// 造一些衍生API给开发者使用
-	addRoute(method string, path string, handleFunc HandleFunc)
+	addRouter(method string, path string, handleFunc HandleFunc)
 }
 
 /*
@@ -55,8 +56,10 @@ type HTTPOption func(h *HTTPServer)
 type HTTPServer struct {
 	srv  *http.Server
 	stop func() error
-	// routers 临时存在路由的位置
-	router map[string]HandleFunc
+	//routers 临时存在路由的位置
+	//router map[string]HandleFunc
+	// 前缀路由树
+	*router
 }
 
 /*
@@ -97,7 +100,7 @@ func WithHTTPServerStop(fn func() error) HTTPOption {
 }
 func NewHTTP(opts ...HTTPOption) *HTTPServer {
 	h := &HTTPServer{
-		router: map[string]HandleFunc{},
+		router: newRouter(),
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -112,15 +115,22 @@ func NewHTTP(opts ...HTTPOption) *HTTPServer {
 // 前端发请求给ServerHTTP， 后端处理后直接根据这个方法发送给前端
 func (h *HTTPServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// 1.匹配路由
-	ctx := newContext(w, req)
-	key := req.Method + "-" + req.URL.Path
-	if handler, ok := h.router[key]; ok { // 如果对应的key存在handler
-		handler(ctx) //转发请求
-	} else {
+	node, ok := h.getRouter(req.Method, req.URL.Path)
+	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte("404 NOT FOUND\n"))
+		return
 	}
-
+	// 构造上下文
+	ctx := newContext(w, req)
+	fmt.Printf("add router %s - %s\n", ctx.Method, ctx.Pattern)
+	node.handleFunc(ctx)
+	//key := ctx.Method + "-" + ctx.Pattern
+	//if handler, ok := h.router[key]; ok { // 如果对应的key存在handler
+	//	handler(ctx) //转发请求
+	//} else {
+	//	w.WriteHeader(http.StatusNotFound)
+	//	_, _ = w.Write([]byte("404 NOT FOUND\n"))
 }
 
 // 启动服务
@@ -130,7 +140,6 @@ func (h *HTTPServer) Start(addr string) error {
 		Handler: h,
 	}
 	return h.srv.ListenAndServe()
-
 }
 
 // 停止服务
@@ -140,12 +149,12 @@ func (h *HTTPServer) Stop() error {
 
 // 注册路由的时机：项目启动的时候，后续就不能注册路由了
 // 注册路由放在哪里？--->有前缀树放前缀树，没前缀树先放map里面，实现一个静态路由匹配
-func (h *HTTPServer) addRouter(method string, pattern string, handleFunc HandleFunc) {
-	key := method + "-" + pattern                        // "GET-login" 目的是要唯一
-	fmt.Printf("add router %s - %s \n", method, pattern) // method表示的是方法GET PUT DELETE AND POST，
-	//pattern表示自定义的匹配格式
-	h.router[key] = handleFunc //注册完毕, 每个路由对应一个HandleFunc
-}
+//func (h *HTTPServer) addRouter(method string, pattern string, handleFunc HandleFunc) {
+//	key := method + "-" + pattern                        // "GET-login" 目的是要唯一
+//	fmt.Printf("add router %s - %s \n", method, pattern) // method表示的是方法GET PUT DELETE AND POST，
+//	//pattern表示自定义的匹配格式
+//	h.router[key] = handleFunc //注册完毕, 每个路由对应一个HandleFunc
+//}
 
 // GET
 func (h *HTTPServer) GET(pattern string, handleFunc HandleFunc) {
