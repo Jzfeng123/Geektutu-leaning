@@ -9,6 +9,7 @@ import (
 func newTestRouter() *router {
 	r := newRouter()
 	r.AddRouter("/user/login", "hello")
+	r.AddRouter("/user/login/study", "hello")
 	r.AddRouter("/user/register/jzf", "hello")
 	r.AddRouter("/user/study/python", "hello")
 	return r
@@ -71,6 +72,11 @@ func TestRouter_GetRouter(t *testing.T) {
 		{
 			name:        "success",
 			findPattern: "/user/login",
+			wantData:    "hello",
+		},
+		{
+			name:        "success",
+			findPattern: "/user/login/study",
 			wantData:    "hello",
 		},
 		{
