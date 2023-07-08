@@ -15,6 +15,7 @@ type Context struct {
 	StatusCode int
 }
 
+// 新建一个上下文，就相当于是一个视图函数
 func newContext(w http.ResponseWriter, r *http.Request) *Context {
 	return &Context{
 		w:       w,
