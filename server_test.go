@@ -1,4 +1,4 @@
-package Geektutu_leaning
+package Geektutu_learning
 
 import (
 	"testing"
@@ -14,7 +14,9 @@ func Register(c *Context) { // 对应的处理器
 func TestHTTP_Start(t *testing.T) {
 	h := NewHTTP()
 	h.GET("/login/jzf", Login)
-	h.GET("/login/jzf", Login)
+	h.GET("/login", Login)
+	h.GET("/", Login)
+	//h.GET("/", Login)
 	h.POST("/register", Register)
 	err := h.Start(":8888")
 	if err != nil {

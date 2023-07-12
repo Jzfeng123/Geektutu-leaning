@@ -1,4 +1,4 @@
-package Geektutu_leaning
+package Geektutu_learning
 
 import (
 	"fmt"
@@ -34,9 +34,21 @@ func newRouter() *router {
 // 还需要考虑 / 是一个正规的路由
 func (r *router) addRouter(method string, pattern string, handler HandleFunc) {
 	fmt.Printf("add router %s - %s\n", method, pattern) // /login/jzf
-	fmt.Println(pattern)
+	fmt.Printf("pattern is %s \n", pattern)
 	if pattern == "" { //
 		panic("路由不可以为空")
+	}
+	// TODO 如果根路由是/怎么办？
+	root, ok := r.trees[method] //root -> *node
+	if !ok {                    //根节点不存在，创一个
+		root = &node{
+			part: "/", // 默认的根节点
+		}
+		r.trees[method] = root
+	}
+	if pattern == "/" {
+		root.handleFunc = handler
+		return // 直接宕掉这个func
 	}
 	if !strings.HasPrefix(pattern, "/") {
 		panic("路由必须以 / 开头")
@@ -44,7 +56,6 @@ func (r *router) addRouter(method string, pattern string, handler HandleFunc) {
 	if strings.HasSuffix(pattern, "/") {
 		panic("路由不能以 / 结尾")
 	}
-	// TODO 如果根路由是/怎么办？
 	//switch {
 	//case pattern == "":
 	//	panic("路由不可以为空\n")
@@ -54,13 +65,14 @@ func (r *router) addRouter(method string, pattern string, handler HandleFunc) {
 	//	panic("路由不能以 / 结尾\n")
 	//}
 	// 获取根节点
-	root, ok := r.trees[method] //root -> *node
-	if !ok {                    //根节点不存在，创一个
-		root = &node{
-			part: "/", // 默认的根节点
-		}
-		r.trees[method] = root
-	}
+	// 第一版写法：
+	//root, ok := r.trees[method] //root -> *node
+	//if !ok {                    //根节点不存在，创一个
+	//	root = &node{
+	//		part: "/", // 默认的根节点
+	//	}
+	//	r.trees[method] = root
+	//}
 	// 切割pattern
 	parts := strings.Split(pattern[1:], "/")
 	for _, part := range parts {
@@ -74,7 +86,8 @@ func (r *router) addRouter(method string, pattern string, handler HandleFunc) {
 
 // method 不需要考虑， method直接找不到就行
 // pattern可以校验一些简单的
-func (r *router) getRouter(method string, pattern string) (*node, bool) {
+func (r *router) getRouter(method string, pattern string) (*node, bool) { //当我们浏览器中直接传入的地址的时候，
+	// 走的是这一个流程而不需要重新注册一遍路由
 	if pattern == "" {
 		return nil, false
 	}
@@ -85,7 +98,12 @@ func (r *router) getRouter(method string, pattern string) (*node, bool) {
 		}
 		root = r.trees[method]
 	}
-	// /user/login/ --> 这种是合理的，因此应该考虑将开头结尾的/去掉
+	// 如果传入的是"/",直接返回对应的root就行
+	if pattern == "/" {
+		return root, true
+	}
+	// /user/login/ --> 这种是合理的，因此应该考虑将开头结尾的/去掉,
+	//包括/login/jzf///////这种情况也是合理的，因为strings.Trim(pattern, "/")会将前后所有/都给去掉
 	parts := strings.Split(strings.Trim(pattern, "/"), "/") //
 	for _, part := range parts {
 		if part == "" {
@@ -106,9 +124,18 @@ type node struct {
 	children map[string]*node
 	// 处理器-视图函数
 	handleFunc HandleFunc
+	// 参数路由
+	// 为什么是一个纯的node节点，因为动态路由是变化的，不好去判断当前节点属于哪一个参数
+	// 静态路由和动态路由的优先级问题
+	paramChild *node
 }
 
+// 在服务启动前调用
 func (n *node) addNode(part string) *node {
+	if strings.HasPrefix(part, ":") && n.paramChild == nil { //参数路由
+		n.paramChild = &node{part: part}
+		return n.paramChild
+	}
 	if n.children == nil {
 		n.children = make(map[string]*node)
 	}
@@ -133,3 +160,17 @@ func (n *node) getNode(part string) *node {
 	}
 	return child
 }
+
+/*
+路由分为动态和静态路由：
+- 静态路由 /user/login/   /study/golang --> 规定好的
+- 动态路由:
+  1. 参数路由
+     /study/:course 咱们注册的路由，匹配的时候可能会匹配到/study/golang、 study/python，
+					但是/study/golang/action这种路由匹配不到
+  2. 通配符路由: 贪婪匹配
+	/static/*filepath 这是咱们注册的路由
+		匹配的时候可能匹配到/static/css/style.css
+						/static/js/index.js
+  3. 正则路由
+*/
