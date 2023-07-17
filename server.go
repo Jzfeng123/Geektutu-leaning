@@ -36,14 +36,14 @@ type Handler interface {
 //type HandleFunc func(w http.ResponseWriter, req *http.Request) //抽象一个处理函数
 type HandleFunc func(*Context)
 
-type server interface {
-	http.Handler
-	Start(addr string) error
-	Stop() error
-	// 注册路由，一个非常核心的API，不能给开发者乱用
-	// 造一些衍生API给开发者使用
-	addRouter(method string, path string, handleFunc HandleFunc)
-}
+//type server interface {
+//	http.Handler
+//	Start(addr string) error
+//	Stop() error
+//	// 注册路由，一个非常核心的API，不能给开发者乱用
+//	// 造一些衍生API给开发者使用
+//	addRouter(method string, path string, handleFunc HandleFunc)
+//}
 
 /*
 	一个Server需要的功能是
@@ -116,16 +116,19 @@ func NewHTTP(opts ...HTTPOption) *HTTPServer {
 func (h *HTTPServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// 1.匹配路由
 	fmt.Printf("req is %s\n", req.URL.Path)
-	node, ok := h.getRouter(req.Method, req.URL.Path) //用户传入的路由从这里获取node
-	if !ok {
+	node, params, ok := h.getRouter(req.Method, req.URL.Path) //用户传入的路由从这里获取node
+	if !ok || node.handleFunc == nil {                        // 返回false表示路由匹配失败
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte("404 NOT FOUND\n"))
 		return
 	}
-	// 构造上下文
+	// 2.构造上下文
 	ctx := newContext(w, req)
+	ctx.params = params //将每一个动态路由的结果保存到上下文中, 一个路由对应一个上下文
 	fmt.Printf("ServerHTTP add router %s - %s\n", ctx.Method, ctx.Pattern)
-	node.handleFunc(ctx)
+	node.handleFunc(ctx) //执行每一个请求的处理器
+	ctx.FlashToHeader()  // 将响应数据写入响应体中。
+	// 第一版
 	//key := ctx.Method + "-" + ctx.Pattern
 	//if handler, ok := h.router[key]; ok { // 如果对应的key存在handler
 	//	handler(ctx) //转发请求
