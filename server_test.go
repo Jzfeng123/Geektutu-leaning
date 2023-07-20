@@ -128,6 +128,7 @@ func TestHTTP_Start(t *testing.T) {
 	v1 := h.Group("//v1//")
 	{
 		v1.GET("/login/xx", func(c *Context) {
+
 			c.HTML(http.StatusOK, `<h1 style="color:red;">XX monster</h1>`)
 		})
 		v1.GET("/login/:name", func(c *Context) {
@@ -147,6 +148,52 @@ func TestHTTP_Start(t *testing.T) {
 			})
 		})
 	}
+	v2 := v1.Group("v2//")
+	{
+		v2.GET("/login/xx", func(c *Context) {
+			c.HTML(http.StatusOK, `<h1 style="color:red;">Hello World</h1>`)
+		})
+		v2.GET("/login/:name", func(c *Context) {
+			c.HTML(http.StatusOK, `<h1 style="color:blue;">Whoo!!</h1>`)
+		})
+		v2.GET("/acquire/*filename", func(c *Context) {
+			filename, err := c.Params("filename") // 找动态路由的方法
+			if err != nil {
+				c.String(http.StatusNotFound, "没这玩意")
+				return
+			}
+			c.JSON(http.StatusOK, H{
+				"code":     200,
+				"msg":      "请求成功",
+				"name":     "king",
+				"filename": filename,
+			})
+		})
+	}
+
+	v3 := h.Group("v3//")
+	{
+		v3.GET("/login/xx", func(c *Context) {
+			c.HTML(http.StatusOK, fmt.Sprintf(`<h1 style="color:red;">%s</h1>`, c.Pattern))
+		})
+		v3.GET("/login/:name", func(c *Context) {
+			c.HTML(http.StatusOK, fmt.Sprintf(`<h1 style="color:blue;">Whoo!!#<%s></h1>`, c.params[":name"]))
+		})
+		v3.GET("/acquire/*filename", func(c *Context) {
+			filename, err := c.Params("filename") // 找动态路由的方法
+			if err != nil {
+				c.String(http.StatusNotFound, "没这玩意")
+				return
+			}
+			c.JSON(http.StatusOK, H{
+				"code":     200,
+				"msg":      "请求成功",
+				"name":     "king",
+				"filename": filename,
+			})
+		})
+	}
+
 	err := h.Start(":8888")
 	if err != nil {
 		panic(err)
