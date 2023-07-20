@@ -106,13 +106,13 @@ func WithHTTPServerStop(fn func() error) HTTPOption {
 	}
 }
 func NewHTTP(opts ...HTTPOption) *HTTPServer {
-	routerGoup := newGroup() //初始化一个路由组
+	routerGroup := NewGroup() //初始化一个路由组
 	h := &HTTPServer{
 		router:      newRouter(),
-		RouterGroup: routerGoup,
+		RouterGroup: routerGroup,
 	}
 	// 结构体相互嵌套的初始化过程
-	routerGoup.engine = h
+	routerGroup.engine = h
 	//
 	//h.RouterGroup = &RouterGroup{
 	//	engine: h,
