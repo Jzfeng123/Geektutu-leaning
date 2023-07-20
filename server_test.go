@@ -57,11 +57,96 @@ func TestHTTP_Start(t *testing.T) {
 		}
 		c.String(http.StatusOK, fmt.Sprintf("参数路由:%s\n", language))
 	})
+	h.GET("/json", func(c *Context) {
+		c.JSON(http.StatusOK, H{ //map[string]interface //这里调用的JSON保存的格式是map[string]string
+			"code": 200,
+			"msg":  "请求成功",
+			"data": []string{
+				"A", "B", "C",
+			},
+		})
+	})
+	// 测试HTML
+	h.GET("/html", func(c *Context) {
+		c.HTML(http.StatusOK, `<h1 style="color:red;">hello world</h1>`)
+		//``不会解析字符串的转义符，""会解析字符串的转义符
+		//效率是前者高于后者
+	})
+
+	h.GET("/query", func(c *Context) {
+		username, err := c.Query("username")
+		if err != nil {
+			c.SetStatusCode(http.StatusNotFound)
+			return
+		}
+		passwd, err := c.Query("passwd")
+		if err != nil {
+			c.SetStatusCode(http.StatusNotFound)
+			return
+		}
+		c.JSON(http.StatusOK, H{
+			"code":     200,
+			"msg":      "请求成功",
+			"username": username,
+			"passwd":   passwd,
+		})
+	})
+
+	h.POST("/body", func(c *Context) {
+		type User struct {
+			Username string `json:"username"`
+			Passwd   string `json:"passwd"`
+		}
+		var user User
+		err := c.BindJSON(&user)
+		if err != nil {
+			c.String(http.StatusNotFound, err.Error())
+			return
+		}
+		//username, err := c.Form("username")
+		//if err != nil {
+		//	c.SetStatusCode(http.StatusNotFound)
+		//	return
+		//}
+		//passwd, err := c.Form("passwd")
+		//if err != nil {
+		//	c.SetStatusCode(http.StatusNotFound)
+		//	return
+		//}
+		c.JSON(http.StatusOK, H{
+			"code":     http.StatusOK,
+			"msg":      "请求成功",
+			"username": user.Username,
+			"passwd":   user.Passwd,
+		})
+	})
 
 	//h.GET("/login/:filename", FileIndex)
 	//h.GET("/post/:filename", ParamsIndex)
 	//h.GET("/", Login)
 	//h.POST("/register", Register)
+	v1 := h.Group("//v1//")
+	{
+		v1.GET("/login/xx", func(c *Context) {
+			c.HTML(http.StatusOK, `<h1 style="color:red;">XX monster</h1>`)
+		})
+		v1.GET("/login/:name", func(c *Context) {
+			c.HTML(http.StatusOK, `<h1 style="color:blue;">XX guai</h1>`)
+		})
+		v1.GET("/acquire/*filename", func(c *Context) {
+			filename, err := c.Params("filename") // 找动态路由的方法
+			if err != nil {
+				c.String(http.StatusNotFound, "没这玩意")
+				return
+			}
+			c.JSON(http.StatusOK, H{
+				"code":     200,
+				"msg":      "请求成功",
+				"name":     "熏熏怪",
+				"filename": filename,
+			})
+		})
+	}
 	err := h.Start(":8888")
 	if err != nil {
 		panic(err)

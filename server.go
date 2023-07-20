@@ -36,14 +36,16 @@ type Handler interface {
 //type HandleFunc func(w http.ResponseWriter, req *http.Request) //抽象一个处理函数
 type HandleFunc func(*Context)
 
-//type server interface {
-//	http.Handler
-//	Start(addr string) error
-//	Stop() error
-//	// 注册路由，一个非常核心的API，不能给开发者乱用
-//	// 造一些衍生API给开发者使用
-//	addRouter(method string, path string, handleFunc HandleFunc)
-//}
+type server interface {
+	http.Handler
+	Start(addr string) error
+	Stop() error
+	// 注册路由，一个非常核心的API，不能给开发者乱用
+	// 造一些衍生API给开发者使用
+	addRouter(method string, path string, handleFunc HandleFunc)
+}
+
+var _ server = &HTTPServer{} // 代码层面判断有没有实现HTTPServer这个接口
 
 /*
 	一个Server需要的功能是
@@ -59,7 +61,12 @@ type HTTPServer struct {
 	//routers 临时存在路由的位置
 	//router map[string]HandleFunc
 	// 前缀路由树
-	*router
+	router *router
+	// *router 和 router *router的区别：前者是直接嵌套，当前结构体直接通过结构体调用对象中的方法，后者是组装，如果想要通过当前结构体调用对象方法
+	//需要使用h.router.addRoute()
+	// 路由组
+	// 这是一个根路由组需要初始化
+	*RouterGroup
 }
 
 /*
@@ -99,9 +106,17 @@ func WithHTTPServerStop(fn func() error) HTTPOption {
 	}
 }
 func NewHTTP(opts ...HTTPOption) *HTTPServer {
+	routerGoup := newGroup() //初始化一个路由组
 	h := &HTTPServer{
-		router: newRouter(),
+		router:      newRouter(),
+		RouterGroup: routerGoup,
 	}
+	// 结构体相互嵌套的初始化过程
+	routerGoup.engine = h
+	//
+	//h.RouterGroup = &RouterGroup{
+	//	engine: h,
+	//}
 	for _, opt := range opts {
 		opt(h)
 	}
@@ -116,8 +131,8 @@ func NewHTTP(opts ...HTTPOption) *HTTPServer {
 func (h *HTTPServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// 1.匹配路由
 	fmt.Printf("req is %s\n", req.URL.Path)
-	node, params, ok := h.getRouter(req.Method, req.URL.Path) //用户传入的路由从这里获取node
-	if !ok || node.handleFunc == nil {                        // 返回false表示路由匹配失败
+	node, params, ok := h.router.getRouter(req.Method, req.URL.Path) //用户传入的路由从这里获取node
+	if !ok || node.handleFunc == nil {                               // 返回false表示路由匹配失败
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte("404 NOT FOUND\n"))
 		return
@@ -160,26 +175,6 @@ func (h *HTTPServer) Stop() error {
 //	//pattern表示自定义的匹配格式
 //	h.router[key] = handleFunc //注册完毕, 每个路由对应一个HandleFunc
 //}
-
-// GET
-func (h *HTTPServer) GET(pattern string, handleFunc HandleFunc) {
-	h.addRouter(http.MethodGet, pattern, handleFunc)
-}
-
-// POST
-func (h *HTTPServer) POST(pattern string, handleFunc HandleFunc) {
-	h.addRouter(http.MethodPost, pattern, handleFunc)
-}
-
-// PUT
-func (h *HTTPServer) PUT(pattern string, handleFunc HandleFunc) {
-	h.addRouter(http.MethodPut, pattern, handleFunc)
-}
-
-// DELETE
-func (h *HTTPServer) DELETE(pattern string, handleFunc HandleFunc) {
-	h.addRouter(http.MethodDelete, pattern, handleFunc)
-}
 
 //func Login(c *Context) {
 //	fmt.Printf("Login请求成功, %s-%s \n", c.Pattern, c.req.URL.Path)
