@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -42,8 +43,11 @@ type server interface {
 	Stop() error
 	// 注册路由，一个非常核心的API，不能给开发者乱用
 	// 造一些衍生API给开发者使用
-	addRouter(method string, path string, handleFunc HandleFunc)
+	addRouter(method string, path string, handleFunc HandleFunc, middlewareChains ...MiddlewareHandleFunc)
 }
+
+// MiddlewareChains 中间件责任链
+type MiddlewareChains []MiddlewareHandleFunc
 
 var _ server = &HTTPServer{} // 代码层面判断有没有实现HTTPServer这个接口
 
@@ -67,6 +71,8 @@ type HTTPServer struct {
 	// 路由组
 	// 这是一个根路由组需要初始化
 	*RouterGroup
+	// 维护整个项目的路由组
+	groups []*RouterGroup
 }
 
 /*
@@ -141,8 +147,24 @@ func (h *HTTPServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx := newContext(w, req)
 	ctx.params = params //将每一个动态路由的结果保存到上下文中, 一个路由对应一个上下文
 	fmt.Printf("ServerHTTP add router %s - %s\n", ctx.Method, ctx.Pattern)
-	node.handleFunc(ctx) //执行每一个请求的处理器
-	ctx.FlashToHeader()  // 将响应数据写入响应体中。
+	// 将项目全局中间件注册好
+	//mids := []MiddlewareHandleFunc{Logger()}
+	mids := h.filterMiddlewares(ctx.Pattern) // 搜集当前请求路由中的所有中间件的方法
+	//if len(mids) == 0 { //如果没当前请求没有中间件那我们就创一个空的
+	//mids = make([]MiddlewareHandleFunc, 0) //这样做的目的是为了统一执行，每一个下标对应一个路由的handler和中间件
+	//}
+	//mids = append(mids, node.middlewareChain...)
+	gms := h.filterMiddlewares(ctx.Pattern)
+	if len(gms) != 0 {
+		gms = append(gms, mids...)
+	}
+	handleFunc := node.handleFunc
+	// 构造责任链制度的核心
+	for i := len(mids) - 1; i >= 0; i-- { //遍历完每一个中间件后开始执行相应的视图函数及中间件逻辑
+		handleFunc = mids[i](handleFunc) // mids[i] --> func(next middlewareHandlerFunc) HandlerFunc, 所以我们需要去执行相应的视图函数
+	}
+	handleFunc(ctx)     //执行每一个请求的处理器
+	ctx.FlashToHeader() // 将响应数据写入响应体中。
 	// 第一版
 	//key := ctx.Method + "-" + ctx.Pattern
 	//if handler, ok := h.router[key]; ok { // 如果对应的key存在handler
@@ -152,7 +174,30 @@ func (h *HTTPServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	//	_, _ = w.Write([]byte("404 NOT FOUND\n"))
 }
 
-// 启动服务
+// filterMiddlewares 匹配当前URL所对应的所有中间件, 首先engine里面要获取所有的中间件
+func (h *HTTPServer) filterMiddlewares(pattern string) []MiddlewareHandleFunc {
+	// pattern 是一个login静态路由而不是路由组里面应该如何去匹配。
+	mids := make([]MiddlewareHandleFunc, 0)
+	for _, group := range h.groups {
+		if strings.HasPrefix(pattern, group.prefix) { // 与""匹配都是true
+			// pattern = "/login/jzf"
+			/*
+				prefix = "", middlewares:[mid1, mid2] //没有注册Group的时候就是这一种情况
+				prefix = "/v1", middlewares:[mid1, mid2]
+				prefix = "/v2", middlewares:[mid1, mid2]
+			*/
+			mids = append(mids, group.middlewares...)
+		}
+	}
+	return mids
+}
+
+/*
+中间件放在每个路由组之中，但是我们在HTTPServer中拿不到所有的路由组信息,
+所以我们应该在engine身上维护整个项目的路由组，如果我们可以获取所有的路由组那么我们就可以获取所有的中间件
+*/
+
+// Start 启动服务
 func (h *HTTPServer) Start(addr string) error {
 	h.srv = &http.Server{
 		Addr:    addr,

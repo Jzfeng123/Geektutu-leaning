@@ -32,7 +32,7 @@ func newRouter() *router {
 // 我们可以规定用户必须以/开头并且不以/结尾,将错误panic给用户
 // 还需要考虑的是pattern中是否会有长连/的情况，例如/user//jzf///login/////
 // 还需要考虑 / 是一个正规的路由
-func (r *router) addRouter(method string, pattern string, handler HandleFunc) {
+func (r *router) addRouter(method string, pattern string, handler HandleFunc, middlewareChains ...MiddlewareHandleFunc) {
 	fmt.Printf("add router %s - %s\n", method, pattern) // /login/jzf
 	//fmt.Printf("pattern is %s \n", pattern)
 	if pattern == "" { //
@@ -88,7 +88,10 @@ func (r *router) addRouter(method string, pattern string, handler HandleFunc) {
 	if root.handleFunc != nil { //如果当前子节点的视图函数不为空，代表发生了路由冲突
 		panic(fmt.Sprintf("web: 路由冲突(相同的注册路由) - %s", pattern))
 	}
+	// 设置路由相应的视图函数
 	root.handleFunc = handler //给最后一个叶子节点添加上相应的视图函数
+	// 设置中间件
+	root.middlewareChain = middlewareChains
 }
 
 // method 不需要考虑， method直接找不到就行
@@ -156,6 +159,8 @@ type node struct {
 	children map[string]*node
 	// 处理器-视图函数
 	handleFunc HandleFunc
+	// 中间件列表
+	middlewareChain MiddlewareChains //这玩意是由用户传进来的，在某个视图函数上所规定的中间件
 	// 参数路由
 	// 为什么是一个纯的node节点，因为动态路由是变化的，不好去判断当前节点属于哪一个参数
 	// 静态路由和动态路由的优先级问题 ---> 静态路由优先级高于动态路由

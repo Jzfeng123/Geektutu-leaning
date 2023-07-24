@@ -162,7 +162,7 @@ func (c *Context) FlashToHeader() {
 	}
 	// 写入状态码
 	c.w.WriteHeader(c.StatusCode)
-	// 写入响应体
+	// 写入响应体, 写给客户端
 	_, _ = c.w.Write(c.data)
 }
 
